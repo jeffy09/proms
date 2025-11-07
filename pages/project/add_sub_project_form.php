@@ -1,0 +1,502 @@
+<?php
+session_start();
+require_once 'server/database.php';
+require_once 'server/functions.php';
+
+// // แสดงข้อผิดพลาดใน PHP
+// ini_set('display_errors', 1);
+// ini_set('display_startup_errors', 1);
+// error_reporting(E_ALL);
+// ดึงข้อมูล user และ department
+$user_info = getUserInfo();
+if ($user_info === null) {
+    // ถ้าไม่พบข้อมูล user ให้ redirect ไปที่หน้า login
+    header("Location: login.php");
+    exit;
+}
+if (!isset($_GET['id'])) {
+    header('Location: manage_projects');
+    exit;
+}
+$encoded_id = htmlspecialchars(strip_tags($_GET['id']));
+$project_id = decrypt(urldecode($encoded_id));
+if ($project_id == '') {
+    header("Location: {$_SERVER['HTTP_REFERER']}");
+    exit;
+}
+$department_id = $user_info['department_id'];
+$department_name = getDepartmentName($department_id);
+$project_details = getProjectDetails($project_id);
+$main_ways = getMainWays();
+$sub_departments = getSubDepartment($department_id);
+
+$database = new Database();
+$db = $database->getConnection();
+$query = "SELECT * FROM sub_project_requests WHERE project_id = :project_id";
+$stmt = $db->prepare($query);
+$stmt->execute([':project_id' => $project_id]);
+$rowCount = $stmt->rowCount();
+$sub_project = $stmt->fetch(PDO::FETCH_ASSOC);
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <?php include('./partials/head.php'); ?>
+
+</head>
+
+<body>
+    <!-- Begin page -->
+    <div class="wrapper">
+
+
+        <!-- ========== Topbar Start ========== -->
+        <?php include('./partials/topbar.php'); ?>
+        <!-- ========== Topbar End ========== -->
+
+        <?php include('./partials/sidebar.php'); ?>
+        <!-- ========== Left Sidebar Start ========== -->
+
+        <!-- ========== Left Sidebar End ========== -->
+
+        <!-- ============================================================== -->
+        <!-- Start Page Content here -->
+        <!-- ============================================================== -->
+
+        <div class="content-page">
+            <div class="content">
+
+                <!-- Start Content-->
+                <div class="container-fluid">
+
+                    <!-- start page title -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="page-title-box">
+                                <div class="page-title-right">
+                                    <ol class="breadcrumb m-0">
+                                        <!-- <li class="breadcrumb-item"><a href="javascript: void(0);">Velonic</a></li>
+                                        <li class="breadcrumb-item"><a href="javascript: void(0);">Dashboards</a></li>
+                                        <li class="breadcrumb-item active">Welcome!</li> -->
+                                    </ol>
+                                </div>
+                                <h4 class="page-title">เพิ่มกิจกรรมย่อย</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- end page title -->
+
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4 class="header-title">กรอกรายละเอียดกิจกรรมย่อย</h4>
+                                    <!-- <p class="text-muted mb-0">
+                                        DataTables has most features enabled by default, so all you need to do to use it
+                                        with your own tables is to call the construction
+                                        function:
+                                        <code>$().DataTable();</code>. KeyTable provides Excel like cell navigation on
+                                        any table. Events (focus, blur, action etc) can be assigned to individual
+                                        cells, columns, rows or all cells.
+                                    </p> -->
+                                </div>
+                                <div class="card-body">
+                                    <form method="POST" action="process_add_sub_project">
+                                        <div class="row">
+                                            <div class="col-4 hidden">
+                                                <label for="department_id">ชื่อโครงการ (หลัก): <?php echo $project_details['project_name']; ?></label>
+                                                <label for="department_id">เลขที่โครงการ (หลัก): <?php echo $project_details['project_number']; ?></label>
+                                                <input class="form-control" type="hidden" id="department_id" name="department_id" value="<?php echo $project_details['department_id']; ?>" readonly>
+                                                <input class="form-control" type="hidden" id="sub_department_id" name="sub_department_id" value="<?php echo $project_details['sub_department_id']; ?>" readonly>
+                                                <input class="form-control" type="hidden" id="project_year" name="project_year" value="<?php echo $project_details['project_year'] + 543; ?>" readonly>
+                                                <input class="form-control" type="hidden" id="project_id" name="project_id" value="<?php echo $project_id; ?>" readonly>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="col-3">
+                                                <label for="project_number">เลขที่โครงการ:</label>
+                                                <input class="form-control" type="text" id="project_number" name="project_number" value="<?php echo "MBU-" . ($project_details['project_year'] + 543) . "-$department_id-$project_id-" . ($rowCount + 1); ?>" readonly><br>
+                                            </div>
+                                        </div>
+                                        <label for="project_name">ชื่อกิจกรรมย่อยที่ <?= $rowCount + 1;?> :</label>
+                                        <input class="form-control" type="hidden" id="sub_project_num" name="sub_project_num" value="<?= $rowCount + 1;?>" required><br>
+                                        <input class="form-control" type="text" id="project_name" name="project_name" value="<?php echo $budget_info['project_name']; ?>" required><br>
+                                        <div class="row">
+                                            <div class="col-3">
+                                                <label for="project_manager">ชื่อผู้รับผิดชอบกิจกรรม :</label>
+                                                <input class="form-control" type="text" id="project_manager" name="project_manager" value="<?php echo $_SESSION['user_firstname'], ' ', $_SESSION['user_lastname']; ?>" readonly><br>
+                                            </div>
+                                            <div class="col-3">
+                                                <label for="manager_tel">เบอร์โทร:</label>
+                                                <input class="form-control" type="text" id="manager_tel" name="manager_tel" value="<?php echo $_SESSION['user_tel']; ?>" readonly><br>
+                                            </div>
+                                        </div>
+                                        <hr>
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <label for="rationale">หลักการและเหตุผล:</label>
+                                                <textarea class="form-control" id="rationale" name="rationale" required></textarea><br>
+                                            </div>
+                                            <div class="col-12">
+                                                <label for="objectives">วัตถุประสงค์:</label>
+                                                <textarea class="form-control" id="objectives" name="objectives" required></textarea><br>
+                                            </div>
+                                            <div class="col-12">
+                                                <label for="impacts">การดำเนินโครงการ:</label>
+                                                <textarea class="form-control" id="implementation" name="implementation" required></textarea><br>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="col-4">
+                                                <label for="primary_target_group">กลุ่มเป้าหมาย:</label>
+                                                <input class="form-control" id="primary_target_group" name="primary_target_group" required><br>
+                                            </div>
+                                            <div class="col-4">
+                                                <label for="primary_target_group_quantity">จำนวนกลุ่มเป้าหมาย:</label>
+                                                <input data-toggle="touchspin" type="number" id="primary_target_group_quantity" name="primary_target_group_quantity" required value="0"><br>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-4">
+                                                <label for="start_month">เดือนที่เริ่ม:</label>
+                                                <select class="form-select" id="start_month" name="start_month" required>
+                                                    <option value="มกราคม">มกราคม</option>
+                                                    <option value="กุมภาพันธ์">กุมภาพันธ์</option>
+                                                    <option value="มีนาคม">มีนาคม</option>
+                                                    <option value="เมษายน">เมษายน</option>
+                                                    <option value="พฤษภาคม">พฤษภาคม</option>
+                                                    <option value="มิถุนายน">มิถุนายน</option>
+                                                    <option value="กรกฎาคม">กรกฎาคม</option>
+                                                    <option value="สิงหาคม">สิงหาคม</option>
+                                                    <option value="กันยายน">กันยายน</option>
+                                                    <option value="ตุลาคม">ตุลาคม</option>
+                                                    <option value="พฤศจิกายน">พฤศจิกายน</option>
+                                                    <option value="ธันวาคม">ธันวาคม</option>
+                                                </select><br>
+                                            </div>
+                                            <div class="col-4">
+                                                <label for="end_month">เดือนที่สิ้นสุด:</label>
+                                                <select class="form-select" id="end_month" name="end_month" required>
+                                                    <option value="มกราคม">มกราคม</option>
+                                                    <option value="กุมภาพันธ์">กุมภาพันธ์</option>
+                                                    <option value="มีนาคม">มีนาคม</option>
+                                                    <option value="เมษายน">เมษายน</option>
+                                                    <option value="พฤษภาคม">พฤษภาคม</option>
+                                                    <option value="มิถุนายน">มิถุนายน</option>
+                                                    <option value="กรกฎาคม">กรกฎาคม</option>
+                                                    <option value="สิงหาคม">สิงหาคม</option>
+                                                    <option value="กันยายน">กันยายน</option>
+                                                    <option value="ตุลาคม">ตุลาคม</option>
+                                                    <option value="พฤศจิกายน">พฤศจิกายน</option>
+                                                    <option value="ธันวาคม">ธันวาคม</option>
+                                                </select><br>
+                                            </div>
+                                            <div class="col-4">
+                                                <label for="project_dates">วันที่จัดโครงการตามแผน</label>
+                                                <input type="text" class="form-control" id="multiple-datepicker" name="project_dates" placeholder="Select Date" data-provide="datepicker" data-date-multidate="true" data-date-container="#datepicker3">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <label for="location">สถานที่จัดโครงการ:</label>
+                                                <textarea class="form-control" id="location" name="location" required></textarea><br>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-4">
+                                                <button class="btn btn-info" type="submit">ส่งข้อมูล</button>
+                                            </div>
+                                        </div>
+                                    </form>
+
+                                </div> <!-- end card body-->
+                            </div> <!-- end card -->
+                        </div><!-- end col-->
+                    </div>
+                    <!-- container -->
+
+                </div>
+                <!-- content -->
+
+                <!-- Footer Start -->
+                <footer class="footer">
+                    <div class="container-fluid">
+                        <div class="row">
+                            <div class="col-12 text-center">
+                                <script>
+                                    document.write(new Date().getFullYear())
+                                </script> © PROMS - Develop by <b>Jeffy ITC MBU</b>
+                            </div>
+                        </div>
+                    </div>
+                </footer>
+                <!-- end Footer -->
+
+            </div>
+
+            <!-- ============================================================== -->
+            <!-- End Page content -->
+            <!-- ============================================================== -->
+
+        </div>
+        <!-- END wrapper -->
+
+        <!-- Theme Settings -->
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="theme-settings-offcanvas">
+            <div class="d-flex align-items-center bg-primary p-3 offcanvas-header">
+                <h5 class="text-white m-0">Theme Settings</h5>
+                <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+
+            <div class="offcanvas-body p-0">
+                <div data-simplebar class="h-100">
+                    <div class="p-3">
+                        <h5 class="mb-3 fs-16 fw-bold">Color Scheme</h5>
+
+                        <div class="row">
+                            <div class="col-4">
+                                <div class="form-check form-switch card-switch mb-1">
+                                    <input class="form-check-input" type="checkbox" name="data-bs-theme" id="layout-color-light" value="light">
+                                    <label class="form-check-label" for="layout-color-light">
+                                        <img src="assets/images/layouts/light.png" alt="" class="img-fluid">
+                                    </label>
+                                </div>
+                                <h5 class="font-14 text-center text-muted mt-2">Light</h5>
+                            </div>
+
+                            <div class="col-4">
+                                <div class="form-check form-switch card-switch mb-1">
+                                    <input class="form-check-input" type="checkbox" name="data-bs-theme" id="layout-color-dark" value="dark">
+                                    <label class="form-check-label" for="layout-color-dark">
+                                        <img src="assets/images/layouts/dark.png" alt="" class="img-fluid">
+                                    </label>
+                                </div>
+                                <h5 class="font-14 text-center text-muted mt-2">Dark</h5>
+                            </div>
+                        </div>
+
+                        <div id="layout-width">
+                            <h5 class="my-3 fs-16 fw-bold">Layout Mode</h5>
+
+                            <div class="row">
+                                <div class="col-4">
+                                    <div class="form-check form-switch card-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="data-layout-mode" id="layout-mode-fluid" value="fluid">
+                                        <label class="form-check-label" for="layout-mode-fluid">
+                                            <img src="assets/images/layouts/light.png" alt="" class="img-fluid">
+                                        </label>
+                                    </div>
+                                    <h5 class="font-14 text-center text-muted mt-2">Fluid</h5>
+                                </div>
+
+                                <div class="col-4">
+                                    <div id="layout-boxed">
+                                        <div class="form-check form-switch card-switch mb-1">
+                                            <input class="form-check-input" type="checkbox" name="data-layout-mode" id="layout-mode-boxed" value="boxed">
+                                            <label class="form-check-label" for="layout-mode-boxed">
+                                                <img src="assets/images/layouts/boxed.png" alt="" class="img-fluid">
+                                            </label>
+                                        </div>
+                                        <h5 class="font-14 text-center text-muted mt-2">Boxed</h5>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h5 class="my-3 fs-16 fw-bold">Topbar Color</h5>
+
+                        <div class="row">
+                            <div class="col-4">
+                                <div class="form-check form-switch card-switch mb-1">
+                                    <input class="form-check-input" type="checkbox" name="data-topbar-color" id="topbar-color-light" value="light">
+                                    <label class="form-check-label" for="topbar-color-light">
+                                        <img src="assets/images/layouts/light.png" alt="" class="img-fluid">
+                                    </label>
+                                </div>
+                                <h5 class="font-14 text-center text-muted mt-2">Light</h5>
+                            </div>
+
+                            <div class="col-4">
+                                <div class="form-check form-switch card-switch mb-1">
+                                    <input class="form-check-input" type="checkbox" name="data-topbar-color" id="topbar-color-dark" value="dark">
+                                    <label class="form-check-label" for="topbar-color-dark">
+                                        <img src="assets/images/layouts/topbar-dark.png" alt="" class="img-fluid">
+                                    </label>
+                                </div>
+                                <h5 class="font-14 text-center text-muted mt-2">Dark</h5>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h5 class="my-3 fs-16 fw-bold">Menu Color</h5>
+
+                            <div class="row">
+                                <div class="col-4">
+                                    <div class="form-check form-switch card-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="data-menu-color" id="leftbar-color-light" value="light">
+                                        <label class="form-check-label" for="leftbar-color-light">
+                                            <img src="assets/images/layouts/sidebar-light.png" alt="" class="img-fluid">
+                                        </label>
+                                    </div>
+                                    <h5 class="font-14 text-center text-muted mt-2">Light</h5>
+                                </div>
+
+                                <div class="col-4">
+                                    <div class="form-check form-switch card-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="data-menu-color" id="leftbar-color-dark" value="dark">
+                                        <label class="form-check-label" for="leftbar-color-dark">
+                                            <img src="assets/images/layouts/light.png" alt="" class="img-fluid">
+                                        </label>
+                                    </div>
+                                    <h5 class="font-14 text-center text-muted mt-2">Dark</h5>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="sidebar-size">
+                            <h5 class="my-3 fs-16 fw-bold">Sidebar Size</h5>
+
+                            <div class="row">
+                                <div class="col-4">
+                                    <div class="form-check form-switch card-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-default" value="default">
+                                        <label class="form-check-label" for="leftbar-size-default">
+                                            <img src="assets/images/layouts/light.png" alt="" class="img-fluid">
+                                        </label>
+                                    </div>
+                                    <h5 class="font-14 text-center text-muted mt-2">Default</h5>
+                                </div>
+
+                                <div class="col-4">
+                                    <div class="form-check form-switch card-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-compact" value="compact">
+                                        <label class="form-check-label" for="leftbar-size-compact">
+                                            <img src="assets/images/layouts/compact.png" alt="" class="img-fluid">
+                                        </label>
+                                    </div>
+                                    <h5 class="font-14 text-center text-muted mt-2">Compact</h5>
+                                </div>
+
+                                <div class="col-4">
+                                    <div class="form-check form-switch card-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-small" value="condensed">
+                                        <label class="form-check-label" for="leftbar-size-small">
+                                            <img src="assets/images/layouts/sm.png" alt="" class="img-fluid">
+                                        </label>
+                                    </div>
+                                    <h5 class="font-14 text-center text-muted mt-2">Condensed</h5>
+                                </div>
+
+
+                                <div class="col-4">
+                                    <div class="form-check form-switch card-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-full" value="full">
+                                        <label class="form-check-label" for="leftbar-size-full">
+                                            <img src="assets/images/layouts/full.png" alt="" class="img-fluid">
+                                        </label>
+                                    </div>
+                                    <h5 class="font-14 text-center text-muted mt-2">Full Layout</h5>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="layout-position">
+                            <h5 class="my-3 fs-16 fw-bold">Layout Position</h5>
+
+                            <div class="btn-group checkbox" role="group">
+                                <input type="radio" class="btn-check" name="data-layout-position" id="layout-position-fixed" value="fixed">
+                                <label class="btn btn-soft-primary w-sm" for="layout-position-fixed">Fixed</label>
+
+                                <input type="radio" class="btn-check" name="data-layout-position" id="layout-position-scrollable" value="scrollable">
+                                <label class="btn btn-soft-primary w-sm ms-0" for="layout-position-scrollable">Scrollable</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="offcanvas-footer border-top p-3 text-center">
+                <div class="row">
+                    <div class="col-6">
+                        <button type="button" class="btn btn-light w-100" id="reset-layout">Reset</button>
+                    </div>
+                    <div class="col-6">
+                        <a href="https://1.envato.market/velonic" target="_blank" role="button" class="btn btn-primary w-100">Buy Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Vendor js -->
+        <script src="assets/js/vendor.min.js"></script>
+
+        <!--  Select2 Plugin Js -->
+        <script src="assets/vendor/select2/js/select2.min.js"></script>
+
+        <!-- Daterangepicker Plugin js -->
+        <script src="assets/vendor/daterangepicker/moment.min.js"></script>
+        <script src="assets/vendor/daterangepicker/daterangepicker.js"></script>
+
+        <!-- Bootstrap Datepicker Plugin js -->
+        <script src="assets/vendor/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
+
+        <!-- Bootstrap Timepicker Plugin js -->
+        <script src="assets/vendor/bootstrap-timepicker/js/bootstrap-timepicker.min.js"></script>
+
+        <!-- Input Mask Plugin js -->
+        <script src="assets/vendor/jquery-mask-plugin/jquery.mask.min.js"></script>
+
+        <!-- Bootstrap Touchspin Plugin js -->
+        <script src="assets/vendor/bootstrap-touchspin/jquery.bootstrap-touchspin.min.js"></script>
+
+        <!-- Bootstrap Maxlength Plugin js -->
+        <script src="assets/vendor/bootstrap-maxlength/bootstrap-maxlength.min.js"></script>
+
+        <!-- Typehead Plugin js -->
+        <script src="assets/vendor/handlebars/handlebars.min.js"></script>
+        <script src="assets/vendor/typeahead.js/typeahead.bundle.min.js"></script>
+
+        <!-- Flatpickr Timepicker Plugin js -->
+        <script src="assets/vendor/flatpickr/flatpickr.min.js"></script>
+
+        <!-- Typehead Demo js -->
+        <script src="assets/js/pages/typehead.init.js"></script>
+
+        <!-- Timepicker Demo js -->
+        <script src="assets/js/pages/timepicker.init.js"></script>
+
+        <!-- App js -->
+        <script src="assets/js/app.min.js"></script>
+
+
+
+
+        <script>
+            $(document).ready(function() {
+                $('#mainway_id').change(function() {
+                    var mainway_id = $(this).val();
+                    if (mainway_id) {
+                        $.ajax({
+                            type: 'POST',
+                            url: 'get_subways',
+                            data: {
+                                mainway_id: mainway_id
+                            },
+                            success: function(response) {
+                                $('#subway_id').html(response);
+                            }
+                        });
+                    } else {
+                        $('#subway_id').html('<option value="">เลือกวิถีย่อย</option>');
+                    }
+                });
+            });
+        </script>
+
+</body>
+
+</html>
